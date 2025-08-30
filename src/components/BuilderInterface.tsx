@@ -98,7 +98,7 @@ export const BuilderInterface = () => {
                         <h3 className="font-bold">Hero Section</h3>
                         <Badge className="bg-white/20">Editable</Badge>
                       </div>
-                      <p className="text-sm opacity-90 mt-2">Welcome to our amazing product!</p>
+                      <p className="text-sm opacity-90 mt-2">Experience the future of no-code development!</p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">

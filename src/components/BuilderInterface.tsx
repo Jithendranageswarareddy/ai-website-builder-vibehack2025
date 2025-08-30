@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import JSZip from "jszip";
 import { 
   Palette, 
   Code2, 
@@ -12,10 +14,144 @@ import {
   Download,
   Sparkles,
   MessageSquare,
-  Play
+  Play,
+  Settings,
+  Zap,
+  Shield,
+  Server,
+  Key,
+  Package,
+  Cloud,
+  FolderOpen,
+  History,
+  Users,
+  Undo2,
+  Redo2
 } from "lucide-react";
+import { SchemaDesigner, DatabaseTable } from "./builder/SchemaDesigner";
+import { APIGenerator } from "./builder/APIGenerator";
+import { AuthGenerator } from "./builder/AuthGenerator";
+import { CanvasBuilder, CanvasBlock } from "./builder/CanvasBuilder";
+import { PropertiesPanel as CanvasPropertiesPanel } from "./builder/CanvasPropertiesPanel";
+import { LivePreview } from "./builder/LivePreview";
+import { AIChatAssistant } from "./builder/AIChatAssistant";
+import { SmartComponentSuggestions } from "./builder/SmartComponentSuggestions";
+import { CodeOptimization } from "./builder/CodeOptimization";
+import { CodeExport } from "./builder/CodeExport";
+import { ProjectExport } from "./builder/ProjectExport";
+import { VercelDeployment } from "./builder/VercelDeployment";
+import { EnvironmentVariablesPanel } from "./builder/EnvironmentVariablesPanel";
+import { ProjectManager } from "./builder/ProjectManager";
+import { CanvasHistoryPanel, SchemaHistoryPanel } from "./builder/HistoryPanel";
+import { CollaborationPanel } from "./builder/CollaborationPanel";
+import { useCanvasHistory, useSchemaHistory } from "../hooks/use-undo-redo";
+import { generateBackendCode, BackendConfig } from "./builder/BackendGenerator";
 
 export const BuilderInterface = () => {
+  const [activeTab, setActiveTab] = useState("frontend");
+  const [tables, setTables] = useState<DatabaseTable[]>([]);
+  const [endpoints, setEndpoints] = useState<any[]>([]);
+  const [authConfig, setAuthConfig] = useState({
+    enableRegistration: true,
+    enableLogin: true,
+    enablePasswordReset: false,
+    jwtSecret: 'your-secret-key',
+    sessionExpiry: '7d',
+    passwordMinLength: 8
+  });
+
+  // Phase 5: Enhanced state management with history
+  const canvasHistory = useCanvasHistory([]);
+  const schemaHistory = useSchemaHistory([]);
+  
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [builderMode, setBuilderMode] = useState<'canvas' | 'preview' | 'code'>('canvas');
+  const [aiMode, setAiMode] = useState<'chat' | 'suggestions' | 'optimize'>('chat');
+  
+  // Phase 4: Deployment & ZIP state
+  const [environmentVariables, setEnvironmentVariables] = useState<Record<string, string>>({
+    NODE_ENV: 'production',
+    PORT: '3001',
+    VITE_API_URL: 'https://your-api.vercel.app'
+  });
+  const [deploymentMode, setDeploymentMode] = useState<'export' | 'deploy' | 'env'>('export');
+  
+  // Phase 5: Collaboration & Project Management state
+  const [projectMode, setProjectMode] = useState<'manage' | 'history' | 'collaborate'>('manage');
+  const [currentUser] = useState({
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com',
+    role: 'owner' as const,
+    status: 'online' as const,
+    lastSeen: new Date(),
+    permissions: {
+      canEdit: true,
+      canDelete: true,
+      canInvite: true,
+      canExport: true
+    }
+  });
+
+  const selectedBlock = canvasHistory.blocks.find(block => block.id === selectedBlockId) || null;
+
+  const updateBlock = (blockId: string, updates: Partial<CanvasBlock>) => {
+    const updatedBlocks = canvasHistory.blocks.map(block => 
+      block.id === blockId 
+        ? { ...block, ...updates, properties: { ...block.properties, ...updates.properties } }
+        : block
+    );
+    canvasHistory.updateBlocks(updatedBlocks, `Updated ${updates.type || 'block'}`);
+  };
+
+  const addBlock = (block: CanvasBlock) => {
+    canvasHistory.addBlock(block);
+  };
+
+  const loadProject = (projectSchema: any) => {
+    // Load canvas blocks with history
+    canvasHistory.updateBlocks(projectSchema.canvasBlocks || [], 'Loaded project');
+    
+    // Load other project data
+    setTables(projectSchema.tables || []);
+    schemaHistory.updateTables(projectSchema.tables || [], 'Loaded project schema');
+    setEndpoints(projectSchema.endpoints || []);
+    setAuthConfig(projectSchema.authConfig || authConfig);
+    setEnvironmentVariables(projectSchema.environmentVariables || environmentVariables);
+  };
+
+  const handleProjectUpdate = () => {
+    // This would typically sync with backend or update project state
+  };
+
+  const handleExportCode = () => {
+    if (activeTab === "backend") {
+      const backendConfig: BackendConfig = {
+        tables: schemaHistory.tables,
+        relations: [],
+        endpoints: endpoints,
+        authConfig: authConfig,
+        projectName: "My App"
+      };
+
+      const files = generateBackendCode(backendConfig);
+      
+      // Create ZIP file
+      const zip = new JSZip();
+      Object.entries(files).forEach(([path, content]) => {
+        zip.file(path, content);
+      });
+
+      zip.generateAsync({ type: "blob" }).then((content) => {
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'backend-code.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+  };
   return (
     <section className="py-20 bg-background">
       <div className="container px-4 md:px-6">
@@ -42,158 +178,422 @@ export const BuilderInterface = () => {
                     <Sparkles className="w-3 h-3 mr-1" />
                     AI Active
                   </Badge>
+                  
+                  {/* Quick Undo/Redo Controls */}
+                  {(activeTab === 'frontend' || activeTab === 'database') && (
+                    <div className="flex gap-1">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          if (activeTab === 'frontend') {
+                            canvasHistory.undo();
+                          } else if (activeTab === 'database') {
+                            const newTables = schemaHistory.undo();
+                            setTables(newTables);
+                          }
+                        }}
+                        disabled={
+                          activeTab === 'frontend' 
+                            ? !canvasHistory.getHistoryInfo().canUndo
+                            : !schemaHistory.getHistoryInfo().canUndo
+                        }
+                      >
+                        <Undo2 className="w-3 h-3" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          if (activeTab === 'frontend') {
+                            canvasHistory.redo();
+                          } else if (activeTab === 'database') {
+                            const newTables = schemaHistory.redo();
+                            setTables(newTables);
+                          }
+                        }}
+                        disabled={
+                          activeTab === 'frontend' 
+                            ? !canvasHistory.getHistoryInfo().canRedo
+                            : !schemaHistory.getHistoryInfo().canRedo
+                        }
+                      >
+                        <Redo2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                  
                   <Button size="sm" className="btn-ai">
                     <Play className="w-3 h-3 mr-1" />
                     Preview
                   </Button>
                 </div>
               </div>
+              
+              {/* Phase Navigation */}
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-8">
+                  <TabsTrigger value="frontend" className="text-xs">
+                    <Palette className="w-3 h-3 mr-1" />
+                    Frontend
+                  </TabsTrigger>
+                  <TabsTrigger value="ai" className="text-xs">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    AI Assistant
+                  </TabsTrigger>
+                  <TabsTrigger value="database" className="text-xs">
+                    <Database className="w-3 h-3 mr-1" />
+                    Database
+                  </TabsTrigger>
+                  <TabsTrigger value="api" className="text-xs">
+                    <Server className="w-3 h-3 mr-1" />
+                    API
+                  </TabsTrigger>
+                  <TabsTrigger value="auth" className="text-xs">
+                    <Shield className="w-3 h-3 mr-1" />
+                    Auth
+                  </TabsTrigger>
+                  <TabsTrigger value="deploy" className="text-xs">
+                    <Cloud className="w-3 h-3 mr-1" />
+                    Deploy
+                  </TabsTrigger>
+                  <TabsTrigger value="project" className="text-xs">
+                    <FolderOpen className="w-3 h-3 mr-1" />
+                    Projects
+                  </TabsTrigger>
+                  <TabsTrigger value="export" className="text-xs">
+                    <Download className="w-3 h-3 mr-1" />
+                    Export
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Frontend Builder Mode Toggle */}
+              {activeTab === 'frontend' && (
+                <Tabs value={builderMode} onValueChange={(value) => setBuilderMode(value as any)} className="w-full mt-2">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="canvas" className="flex items-center gap-2">
+                      <Layers className="w-3 h-3" />
+                      Canvas
+                    </TabsTrigger>
+                    <TabsTrigger value="preview" className="flex items-center gap-2">
+                      <Eye className="w-3 h-3" />
+                      Preview
+                    </TabsTrigger>
+                    <TabsTrigger value="code" className="flex items-center gap-2">
+                      <Code2 className="w-3 h-3" />
+                      Code
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+
+              {/* Deployment Mode Toggle */}
+              {activeTab === 'deploy' && (
+                <Tabs value={deploymentMode} onValueChange={(value) => setDeploymentMode(value as any)} className="w-full mt-2">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="export" className="flex items-center gap-2">
+                      <Package className="w-3 h-3" />
+                      Export ZIP
+                    </TabsTrigger>
+                    <TabsTrigger value="deploy" className="flex items-center gap-2">
+                      <Cloud className="w-3 h-3" />
+                      Deploy
+                    </TabsTrigger>
+                    <TabsTrigger value="env" className="flex items-center gap-2">
+                      <Key className="w-3 h-3" />
+                      Environment
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+
+              {/* Project Management Mode Toggle */}
+              {activeTab === 'project' && (
+                <Tabs value={projectMode} onValueChange={(value) => setProjectMode(value as any)} className="w-full mt-2">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="manage" className="flex items-center gap-2">
+                      <FolderOpen className="w-3 h-3" />
+                      Manage
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="flex items-center gap-2">
+                      <History className="w-3 h-3" />
+                      History
+                    </TabsTrigger>
+                    <TabsTrigger value="collaborate" className="flex items-center gap-2">
+                      <Users className="w-3 h-3" />
+                      Collaborate
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
             </CardHeader>
 
             <CardContent className="p-0">
-              <div className="grid lg:grid-cols-4 h-[600px]">
-                {/* Components Panel */}
-                <div className="bg-muted/30 border-r border-border/50 p-4">
-                  <div className="space-y-4">
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <Layers className="w-4 h-4" />
-                      Components
-                    </h3>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { name: "Header", icon: "□" },
-                        { name: "Button", icon: "▢" },
-                        { name: "Form", icon: "▥" },
-                        { name: "Card", icon: "▦" },
-                        { name: "Gallery", icon: "▣" },
-                        { name: "Footer", icon: "▤" }
-                      ].map((component, i) => (
-                        <Button
-                          key={i}
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto p-3 flex flex-col items-center gap-1 hover:bg-primary/10 hover:text-primary transition-colors"
-                        >
-                          <span className="text-lg">{component.icon}</span>
-                          <span className="text-xs">{component.name}</span>
-                        </Button>
-                      ))}
-                    </div>
-
-                    <Button size="sm" className="w-full btn-ghost-ai">
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add Component
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Canvas Area */}
-                <div className="lg:col-span-2 bg-white border-r border-border/50 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-                  <div className="relative z-10 p-8 space-y-6">
-                    {/* Simulated webpage elements */}
-                    <div className="bg-gradient-primary p-4 rounded-lg text-white">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-bold">Hero Section</h3>
-                        <Badge className="bg-white/20">Editable</Badge>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsContent value="frontend" className="m-0">
+                  {/* Enhanced Frontend Builder with Canvas */}
+                  {builderMode === 'canvas' && (
+                    <div className="grid grid-cols-5 h-[600px]">
+                      <div className="col-span-3">
+                        <CanvasBuilder
+                          blocks={canvasHistory.blocks}
+                          setBlocks={(blocks) => canvasHistory.updateBlocks(blocks, 'Canvas updated')}
+                          selectedBlockId={selectedBlockId}
+                          setSelectedBlockId={setSelectedBlockId}
+                        />
                       </div>
-                      <p className="text-sm opacity-90 mt-2">Experience the future of no-code development!</p>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-muted/50 p-3 rounded border-2 border-dashed border-primary/30 hover:border-primary/60 cursor-pointer transition-colors">
-                          <div className="w-8 h-8 bg-primary/20 rounded mb-2"></div>
-                          <div className="h-2 bg-muted rounded mb-1"></div>
-                          <div className="h-1 bg-muted/70 rounded"></div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="bg-muted/30 p-4 rounded-lg border-2 border-dashed border-accent/30">
-                      <div className="text-center text-muted-foreground">
-                        <Plus className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Drop components here</p>
+                      <div className="col-span-2">
+                        <CanvasPropertiesPanel
+                          selectedBlock={selectedBlock}
+                          updateBlock={updateBlock}
+                        />
                       </div>
                     </div>
-                  </div>
-                </div>
+                  )}
 
-                {/* Properties Panel */}
-                <div className="bg-muted/30 p-4">
-                  <Tabs defaultValue="design" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="design" className="text-xs">
-                        <Palette className="w-3 h-3 mr-1" />
-                        Design
-                      </TabsTrigger>
-                      <TabsTrigger value="code" className="text-xs">
-                        <Code2 className="w-3 h-3 mr-1" />
-                        Code
-                      </TabsTrigger>
-                      <TabsTrigger value="data" className="text-xs">
-                        <Database className="w-3 h-3 mr-1" />
-                        Data
-                      </TabsTrigger>
-                    </TabsList>
+                  {builderMode === 'preview' && (
+                    <div className="h-[600px]">
+                      <LivePreview
+                        blocks={canvasHistory.blocks}
+                        projectName="My App"
+                      />
+                    </div>
+                  )}
 
-                    <TabsContent value="design" className="space-y-4 mt-4">
-                      <div>
-                        <label className="text-xs font-medium mb-2 block">Background</label>
-                        <div className="flex gap-2">
-                          <div className="w-6 h-6 bg-white border rounded cursor-pointer"></div>
-                          <div className="w-6 h-6 bg-primary rounded cursor-pointer"></div>
-                          <div className="w-6 h-6 bg-gradient-primary rounded cursor-pointer"></div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium mb-2 block">Typography</label>
-                        <select className="w-full text-xs p-2 border rounded">
-                          <option>Inter</option>
-                          <option>Roboto</option>
-                          <option>Open Sans</option>
-                        </select>
-                      </div>
-                    </TabsContent>
+                  {builderMode === 'code' && (
+                    <div className="h-[600px]">
+                      <CodeExport
+                        blocks={canvasHistory.blocks}
+                        tables={schemaHistory.tables}
+                        endpoints={endpoints}
+                        authConfig={authConfig}
+                        projectName="My App"
+                      />
+                    </div>
+                  )}
+                </TabsContent>
 
-                    <TabsContent value="code" className="space-y-4 mt-4">
-                      <div className="bg-black/90 text-green-400 p-3 rounded text-xs font-mono">
-                        <div>{'<div className="hero">'}</div>
-                        <div className="ml-2">{'<h1>Welcome</h1>'}</div>
-                        <div>{'</div>'}</div>
-                      </div>
-                      <Button size="sm" className="w-full btn-ai text-xs">
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        AI Optimize
+                <TabsContent value="ai" className="m-0">
+                  {/* AI Features Tab */}
+                  <div className="p-4">
+                    <div className="flex gap-2 mb-4">
+                      <Button
+                        variant={aiMode === 'chat' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAiMode('chat')}
+                      >
+                        <MessageSquare className="w-3 h-3 mr-1" />
+                        AI Chat
                       </Button>
-                    </TabsContent>
+                      <Button
+                        variant={aiMode === 'suggestions' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAiMode('suggestions')}
+                      >
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Smart Suggestions
+                      </Button>
+                      <Button
+                        variant={aiMode === 'optimize' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAiMode('optimize')}
+                      >
+                        <Zap className="w-3 h-3 mr-1" />
+                        Code Optimization
+                      </Button>
+                    </div>
 
-                    <TabsContent value="data" className="space-y-4 mt-4">
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium">Connected APIs</div>
-                        <div className="bg-muted/50 p-2 rounded text-xs">
-                          /api/users
-                        </div>
-                        <div className="bg-muted/50 p-2 rounded text-xs">
-                          /api/products
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
+                    {aiMode === 'chat' && (
+                      <AIChatAssistant
+                        blocks={canvasHistory.blocks}
+                        setBlocks={(blocks) => canvasHistory.updateBlocks(blocks, 'AI assistant changes')}
+                        selectedBlockId={selectedBlockId}
+                        onUpdateBlock={updateBlock}
+                        onAddBlock={addBlock}
+                        projectContext={{
+                          tables: schemaHistory.tables,
+                          endpoints,
+                          authConfig
+                        }}
+                      />
+                    )}
 
-                  <div className="mt-6 space-y-2">
-                    <Button size="sm" className="w-full" variant="outline">
-                      <Eye className="w-3 h-3 mr-1" />
-                      Preview
-                    </Button>
-                    <Button size="sm" className="w-full btn-hero">
-                      <Download className="w-3 h-3 mr-1" />
-                      Export Code
-                    </Button>
+                    {aiMode === 'suggestions' && (
+                      <SmartComponentSuggestions
+                        blocks={canvasHistory.blocks}
+                        onAddBlock={addBlock}
+                        onUpdateBlocks={(blocks) => canvasHistory.updateBlocks(blocks, 'Smart suggestions applied')}
+                        projectContext={{
+                          tables: schemaHistory.tables,
+                          endpoints,
+                          authConfig
+                        }}
+                      />
+                    )}
+
+                    {aiMode === 'optimize' && (
+                      <CodeOptimization
+                        blocks={canvasHistory.blocks}
+                        projectContext={{
+                          tables: schemaHistory.tables,
+                          endpoints,
+                          authConfig
+                        }}
+                      />
+                    )}
                   </div>
-                </div>
-              </div>
+                </TabsContent>
+
+                <TabsContent value="database" className="m-0">
+                  <div className="h-[600px]">
+                    <SchemaDesigner 
+                      tables={schemaHistory.tables} 
+                      setTables={(tables) => {
+                        setTables(tables);
+                        schemaHistory.updateTables(tables, 'Schema updated');
+                      }}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="api" className="m-0">
+                  <div className="h-[600px]">
+                    <APIGenerator 
+                      tables={schemaHistory.tables}
+                      endpoints={endpoints}
+                      setEndpoints={setEndpoints}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="auth" className="m-0">
+                  <div className="h-[600px]">
+                    <AuthGenerator 
+                      authConfig={authConfig}
+                      setAuthConfig={setAuthConfig}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="deploy" className="m-0">
+                  {/* Phase 4: Deployment & ZIP Features */}
+                  {deploymentMode === 'export' && (
+                    <div className="h-[600px]">
+                      <ProjectExport
+                        blocks={canvasHistory.blocks}
+                        tables={schemaHistory.tables}
+                        endpoints={endpoints}
+                        authConfig={authConfig}
+                        environmentVariables={environmentVariables}
+                        projectName="My App"
+                      />
+                    </div>
+                  )}
+
+                  {deploymentMode === 'deploy' && (
+                    <div className="h-[600px]">
+                      <VercelDeployment
+                        blocks={canvasHistory.blocks}
+                        tables={schemaHistory.tables}
+                        endpoints={endpoints}
+                        authConfig={authConfig}
+                        environmentVariables={environmentVariables}
+                        projectName="My App"
+                      />
+                    </div>
+                  )}
+
+                  {deploymentMode === 'env' && (
+                    <div className="h-[600px]">
+                      <EnvironmentVariablesPanel
+                        environmentVariables={environmentVariables}
+                        onVariablesChange={setEnvironmentVariables}
+                      />
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="project" className="m-0">
+                  {/* Phase 5: Collaboration & Project Management Features */}
+                  {projectMode === 'manage' && (
+                    <div className="h-[600px]">
+                      <ProjectManager
+                        currentProject={{
+                          canvasBlocks: canvasHistory.blocks,
+                          tables: schemaHistory.tables,
+                          endpoints: endpoints,
+                          authConfig: authConfig,
+                          environmentVariables: environmentVariables
+                        }}
+                        onLoadProject={loadProject}
+                        onProjectUpdate={handleProjectUpdate}
+                      />
+                    </div>
+                  )}
+
+                  {projectMode === 'history' && (
+                    <div className="grid grid-cols-2 gap-4 h-[600px] p-4">
+                      <CanvasHistoryPanel
+                        canvasHistory={canvasHistory}
+                        onUndo={() => canvasHistory.undo()}
+                        onRedo={() => canvasHistory.redo()}
+                        onGoToState={(index) => {
+                          const newBlocks = canvasHistory.getFullHistory()[index]?.data || [];
+                          canvasHistory.updateBlocks(newBlocks, 'Navigated to history state');
+                        }}
+                        onClearHistory={() => canvasHistory.clearHistory()}
+                      />
+                      <SchemaHistoryPanel
+                        schemaHistory={schemaHistory}
+                        onUndo={() => {
+                          const newTables = schemaHistory.undo();
+                          setTables(newTables);
+                        }}
+                        onRedo={() => {
+                          const newTables = schemaHistory.redo();
+                          setTables(newTables);
+                        }}
+                        onGoToState={(index) => {
+                          const newTables = schemaHistory.getFullHistory()[index]?.data || [];
+                          setTables(newTables);
+                        }}
+                        onClearHistory={() => {
+                          schemaHistory.clearHistory();
+                          setTables([]);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {projectMode === 'collaborate' && (
+                    <div className="h-[600px]">
+                      <CollaborationPanel
+                        projectId="current-project"
+                        currentUser={currentUser}
+                        onInviteUser={(email, role) => {
+                          // Invite user
+                        }}
+                        onUpdatePermissions={(userId, permissions) => {
+                          // Update permissions
+                        }}
+                      />
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="export" className="m-0">
+                  <div className="h-[600px]">
+                    <CodeExport
+                      blocks={canvasHistory.blocks}
+                      tables={schemaHistory.tables}
+                      endpoints={endpoints}
+                      authConfig={authConfig}
+                      projectName="My App"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
